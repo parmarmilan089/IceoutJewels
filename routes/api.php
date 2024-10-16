@@ -19,7 +19,11 @@ Route::middleware('api')->group(function () {
         //admin route
         Route::middleware('auth:admin')->group(function () {
             Route::get('fetch', [App\Http\Controllers\AdminAuthController::class, 'fetch']);
+            //categories route
+            Route::apiResource('categories', App\Http\Controllers\CategoriesController::class);
         });
+
+
     });
 
 
