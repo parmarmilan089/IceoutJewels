@@ -57,6 +57,7 @@ Route::prefix('admin')->name('admin.')->group(function(){
         
         Route::resource('addons', AddonsController::class);
         Route::resource('orders', OrderController::class);
+        Route::post('settings/update', [SettingController::class, 'updateSettings'])->name('settings.updateAll');
         Route::resource('settings', SettingController::class);
 
         Route::post('logout', [LoginController::class, 'adminLogout'])->name('logout');

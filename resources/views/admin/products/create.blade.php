@@ -268,15 +268,63 @@
                         <h4 class="card-title">Product Variants</h4>
                     </div>
                     <div class="card-body">
+                    <div class="card-body">
                         @foreach($variants as $variant)
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" 
-                                       name="variant_types[]" value="{{ $variant->id }}" 
-                                       id="variant_{{ $variant->id }}"
-                                       {{ isset($product) && $product->variants->contains($variant->id) ? 'checked' : '' }}>
-                                <label class="form-check-label" for="variant_{{ $variant->id }}">
-                                    {{ $variant->name }}
-                                </label>
+                            <div class="variant-item border-bottom pb-2 mb-2">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input variant-checkbox" type="checkbox" 
+                                           name="variant_types[]" value="{{ $variant->id }}" 
+                                           id="variant_{{ $variant->id }}"
+                                           data-id="{{ $variant->id }}"
+                                           {{ isset($product) && $product->variants->contains($variant->id) ? 'checked' : '' }}>
+                                    <label class="form-check-label font-weight-bold" for="variant_{{ $variant->id }}">
+                                        {{ $variant->name }}
+                                    </label>
+                                </div>
+                                
+                                <div class="variant-options-wrapper ml-4" id="variant_options_{{ $variant->id }}" 
+                                     style="display: {{ isset($product) && $product->variants->contains($variant->id) ? 'block' : 'none' }};">
+                                    <table class="table table-sm table-borderless mb-2">
+                                        <tbody id="options_tbody_{{ $variant->id }}">
+                                            @if(isset($selectedOptions) && isset($selectedOptions[$variant->id]))
+                                                @foreach($selectedOptions[$variant->id] as $selectedOption)
+                                                    <tr>
+                                                        <td class="pl-0">
+                                                            <select class="form-control form-control-sm variant-option-select" 
+                                                                    name="variant_options[{{ $variant->id }}][names][]" 
+                                                                    data-variant-id="{{ $variant->id }}" required>
+                                                                <option value="">Select Option</option>
+                                                                @foreach($variant->options as $availableOption)
+                                                                    <option value="{{ $availableOption->option_name }}"
+                                                                        {{ $availableOption->option_name == $selectedOption->option_name ? 'selected' : '' }}>
+                                                                        {{ $availableOption->option_name }} (Default: ${{ number_format($availableOption->additional_price, 2) }})
+                                                                    </option>
+                                                                @endforeach
+                                                            </select>
+                                                        </td>
+                                                        <td>
+                                                            <div class="input-group input-group-sm">
+                                                                <span class="input-group-text">$</span>
+                                                                <input type="number" step="0.01" class="form-control form-control-sm option-price-input" 
+                                                                       name="variant_options[{{ $variant->id }}][prices][]" 
+                                                                       value="{{ $selectedOption->additional_price }}" 
+                                                                       placeholder="Price">
+                                                            </div>
+                                                        </td>
+                                                        <td class="text-right pr-0" style="width: 40px;">
+                                                            <button type="button" class="btn btn-sm btn-danger remove-option-btn">
+                                                                <i class="feather feather-x"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            @endif
+                                        </tbody>
+                                    </table>
+                                    <button type="button" class="btn btn-xs btn-outline-primary add-option-btn" data-variant-id="{{ $variant->id }}">
+                                        <i class="feather feather-plus"></i> Add {{ $variant->name }} Option
+                                    </button>
+                                </div>
                             </div>
                         @endforeach
                     </div>
@@ -326,6 +374,21 @@
 
 @section('script')
     <script>
+        // Variant Data from Controller
+        window.variantOptionsData = {
+            @foreach($variants as $variant)
+                {{ $variant->id }}: [
+                    @foreach($variant->options as $opt)
+                        {
+                            id: "{{ $opt->id }}",
+                            name: "{{ addslashes($opt->option_name) }}",
+                            price: "{{ $opt->additional_price }}"
+                        },
+                    @endforeach
+                ],
+            @endforeach
+        };
+
         // Image preview
         $('#featured_image').on('change', function(e) {
             const file = e.target.files[0];
@@ -337,5 +400,80 @@
                 reader.readAsDataURL(file);
             }
         });
+
+        // Variant Options Logic
+        $(document).on('change', '.variant-checkbox', function() {
+            var variantId = $(this).data('id');
+            var container = $('#variant_options_' + variantId);
+            
+            if ($(this).is(':checked')) {
+                container.slideDown();
+                // Add one empty row if none exist
+                if (container.find('tbody tr').length === 0) {
+                    addOptionRow(variantId);
+                }
+            } else {
+                container.slideUp();
+            }
+        });
+
+        $(document).on('click', '.add-option-btn', function() {
+            var variantId = $(this).data('variant-id');
+            addOptionRow(variantId);
+        });
+
+        $(document).on('click', '.remove-option-btn', function() {
+            $(this).closest('tr').remove();
+        });
+        
+        // Auto-fill price on option selection
+        $(document).on('change', '.variant-option-select', function() {
+            var variantId = $(this).data('variant-id');
+            var selectedName = $(this).val(); // We use Name as value to match backend logic
+            var priceInput = $(this).closest('tr').find('.option-price-input');
+            
+            // Find option data
+            var options = window.variantOptionsData[variantId] || [];
+            var found = options.find(o => o.name == selectedName);
+            
+            if (found) {
+                priceInput.val(found.price);
+            }
+        });
+
+        function addOptionRow(variantId) {
+            var options = window.variantOptionsData[variantId] || [];
+            var optionsHtml = '<option value="">Select Option</option>';
+            
+            options.forEach(function(opt) {
+                optionsHtml += `<option value="${opt.name}">${opt.name} (Default: $${opt.price})</option>`;
+            });
+
+            var row = `
+                <tr>
+                    <td class="pl-0">
+                        <select class="form-control form-control-sm variant-option-select" 
+                                name="variant_options[` + variantId + `][names][]" 
+                                data-variant-id="${variantId}" required>
+                            ${optionsHtml}
+                        </select>
+                    </td>
+                    <td>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" class="form-control form-control-sm option-price-input" 
+                                   name="variant_options[` + variantId + `][prices][]" 
+                                   value="0" placeholder="Price">
+                        </div>
+                    </td>
+                    <td class="text-right pr-0" style="width: 40px;">
+                        <button type="button" class="btn btn-sm btn-danger remove-option-btn">
+                            <i class="feather feather-x"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            $('#options_tbody_' + variantId).append(row);
+        }
     </script>
 @endsection

@@ -1,10 +1,10 @@
 <!--aside open-->
 <aside class="app-sidebar">
-    <div class="app-sidebar__logo">
+    <!-- <div class="app-sidebar__logo">
         <a class="header-brand" href="{{ route('admin.dashboard') }}">
             <img src="{{ asset('assets/images/logo.png') }}" alt="logo" class="full-logo">
         </a>
-    </div>
+    </div> -->
     <div class="app-sidebar3">
         <!-- <div class="app-sidebar__user">
             <div class="dropdown user-pro-body text-center">
@@ -37,8 +37,8 @@
 
             <!-- Product Management Dropdown -->
             <li class="slide">
-                <a class="side-menu__item {{ in_array(request()->segment(2), ['products', 'product-variants', 'variant-options']) ? 'active' : '' }}" 
-                   data-bs-toggle="slide" href="javascript:void(0)">
+                <a class="side-menu__item {{ in_array(request()->segment(2), ['products', 'product-variants', 'variant-options', 'categories']) ? 'active' : '' }}" 
+                   data-toggle="slide" href="javascript:void(0)">
                     <i class="fas fa-shopping-bag"></i>
                     <span class="side-menu__label">Product Management</span>
                     <i class="angle fa fa-angle-right"></i>

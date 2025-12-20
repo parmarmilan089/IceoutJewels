@@ -165,4 +165,41 @@ class VariantCombinationService
         // Generate new combinations
         return $this->generateCombinations($product, $variantTypeIds);
     }
+
+    /**
+     * Generate combinations from specific selected options
+     */
+    public function generateCombinationsFromSpecificOptions(Product $product, array $variantOptionsMap)
+    {
+        if (empty($variantOptionsMap)) {
+            return [];
+        }
+        
+        // Generate cartesian product
+        $combinations = $this->cartesianProduct($variantOptionsMap);
+        
+        $createdCombinations = [];
+        
+        foreach ($combinations as $combination) {
+            $combinationData = $this->prepareCombinationData($product, $combination);
+            
+            // Check if combination already exists
+            $existing = ProductVariantCombination::where('product_id', $product->id)
+                ->where('sku', $combinationData['sku'])
+                ->first();
+            
+            if (!$existing) {
+                $createdCombinations[] = ProductVariantCombination::create($combinationData);
+            } else {
+                // Update price and verify availability
+                $existing->update([
+                    'price' => $combinationData['price'],
+                    // If stock was 0 but now price changed, does it matter? No.
+                ]);
+                $createdCombinations[] = $existing;
+            }
+        }
+        
+        return $createdCombinations;
+    }
 }

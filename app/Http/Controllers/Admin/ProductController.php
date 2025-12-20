@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\ProductVariant;
+use App\Models\VariantOption;
 use App\Services\SKUGeneratorService;
 use App\Services\VariantCombinationService;
 use Illuminate\Http\Request;
@@ -93,7 +94,10 @@ class ProductController extends Controller
     public function create()
     {
         $categories = Category::whereNull('parent_id')->where('status', 1)->get();
-        $variants = ProductVariant::where('is_active', 1)->orderBy('display_order')->get();
+        // Load variants with their options for selection
+        $variants = ProductVariant::with(['options' => function($query) {
+            $query->active()->orderBy('display_order');
+        }])->where('is_active', 1)->orderBy('display_order')->get();
         $sku = $this->skuGenerator->generateProductSKU();
         
         return view('admin.products.create', compact('categories', 'variants', 'sku'));
@@ -147,6 +151,7 @@ class ProductController extends Controller
             // Attach selected variants
             if ($request->has('variant_types')) {
                 $product->variants()->sync($request->variant_types);
+                $this->syncVariantsAndOptions($product, $request);
             }
             
             return redirect()->route('admin.products.index')
@@ -161,11 +166,29 @@ class ProductController extends Controller
     
     public function edit($id)
     {
-        $product = Product::with('variants')->findOrFail($id);
+        $product = Product::with(['variants', 'combinations'])->findOrFail($id);
         $categories = Category::whereNull('parent_id')->where('status', 1)->get();
-        $variants = ProductVariant::where('is_active', 1)->orderBy('display_order')->get();
+        // Load variants with their options for selection
+        $variants = ProductVariant::with(['options' => function($query) {
+            $query->active()->orderBy('display_order');
+        }])->where('is_active', 1)->orderBy('display_order')->get();
         
-        return view('admin.products.create', compact('product', 'categories', 'variants'));
+        // Extract selected options from combinations
+        $selectedOptions = [];
+        if ($product->combinations) {
+            foreach ($product->combinations as $combination) {
+                foreach ($combination->getVariantOptions() as $option) {
+                    if (!isset($selectedOptions[$option->product_variant_id])) {
+                        $selectedOptions[$option->product_variant_id] = collect();
+                    }
+                    if (!$selectedOptions[$option->product_variant_id]->contains('id', $option->id)) {
+                        $selectedOptions[$option->product_variant_id]->push($option);
+                    }
+                }
+            }
+        }
+        
+        return view('admin.products.create', compact('product', 'categories', 'variants', 'selectedOptions'));
     }
     
     public function update(Request $request, $id)
@@ -215,6 +238,7 @@ class ProductController extends Controller
             // Sync variants
             if ($request->has('variant_types')) {
                 $product->variants()->sync($request->variant_types);
+                $this->syncVariantsAndOptions($product, $request);
             }
             
             return redirect()->route('admin.products.index')
@@ -271,6 +295,62 @@ class ProductController extends Controller
                 'success' => false,
                 'message' => 'Failed to update status: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    private function syncVariantsAndOptions(Product $product, Request $request)
+    {
+        $variantOptionsInput = $request->input('variant_options', []);
+        $variantTypes = $request->input('variant_types', []);
+        
+        if (empty($variantTypes)) {
+            return;
+        }
+
+        $optionsBySlug = [];
+
+        foreach ($variantTypes as $variantId) {
+            $variant = ProductVariant::find($variantId);
+            if (!$variant) continue;
+
+            $inputData = $variantOptionsInput[$variantId] ?? null;
+            
+            if ($inputData && isset($inputData['names'])) {
+                $names = $inputData['names'];
+                $prices = $inputData['prices'] ?? [];
+                
+                $optionIds = [];
+                
+                foreach ($names as $index => $name) {
+                    if (empty($name)) continue;
+                    
+                    $price = $prices[$index] ?? 0;
+                    
+                    // Create or Update GLOBAL Option
+                    $option = VariantOption::firstOrNew([
+                        'product_variant_id' => $variantId,
+                        'option_name' => $name
+                    ]);
+                    
+                    $option->additional_price = $price;
+                    $option->is_active = true; // Ensure active
+                    if (!$option->exists) {
+                         // Default SKU Code
+                         $option->sku_code = strtoupper(substr($name, 0, 3)) . rand(10, 99); 
+                    }
+                    $option->save();
+                    
+                    $optionIds[] = $option->id;
+                }
+                
+                if (!empty($optionIds)) {
+                    $optionsBySlug[$variant->slug] = $optionIds;
+                }
+            }
+        }
+        
+        if (!empty($optionsBySlug)) {
+            $this->combinationService->generateCombinationsFromSpecificOptions($product, $optionsBySlug);
         }
     }
 }

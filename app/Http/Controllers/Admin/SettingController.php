@@ -2,16 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
-
-use App\Models\User;
-use App\Helpers\Helper;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Crypt;
-use Yajra\DataTables\Facades\DataTables;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\Request;
+use App\Models\Setting;
 
 class SettingController extends Controller
 {
@@ -20,15 +13,72 @@ class SettingController extends Controller
      */
     public function index(Request $request)
     {
-
-        return view('admin.settings.index');
+        $settings = Setting::all()->pluck('value', 'key')->toArray();
+        return view('admin.settings.index', compact('settings'));
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Update settings.
      */
-    public function create()
+    public function updateSettings(Request $request)
     {
+        $group = $request->input('group', 'general');
+
+        $rules = [];
+        if ($group === 'general') {
+            $rules = [
+                'store_name' => 'required|string|max:255',
+                'support_email' => 'required|email',
+            ];
+        } elseif ($group === 'currency') {
+            $rules = [
+                'currency_code' => 'required|string|max:3',
+            ];
+        }
+
+        if (!empty($rules)) {
+            $request->validate($rules);
+        }
+
+        $data = $request->except(['_token', 'group']);
+
+        foreach ($data as $key => $value) {
+            // Skip file inputs here, handled separately
+            if ($request->hasFile($key)) {
+                continue;
+            }
+
+            Setting::updateOrCreate(
+                ['key' => $key],
+                [
+                    'value' => $value,
+                    'group' => $group,
+                    'type' => 'text'
+                ]
+            );
+        }
+
+        // Handle File Uploads
+        $files = ['logo', 'favicon'];
+        foreach ($files as $fileKey) {
+            if ($request->hasFile($fileKey)) {
+                $file = $request->file($fileKey);
+                $filename = $fileKey . '.' . $file->getClientOriginalExtension();
+                $path = 'uploads/settings';
+                $file->move(public_path($path), $filename);
+                
+                Setting::updateOrCreate(
+                    ['key' => $fileKey],
+                    [
+                        'value' => $path . '/' . $filename,
+                        'group' => 'branding',
+                        'type' => 'file'
+                    ]
+                );
+            }
+        }
+
+        return redirect()->back()->with('success', 'Settings updated successfully.');
     }
 
     /**
@@ -36,40 +86,6 @@ class SettingController extends Controller
      */
     public function store(Request $request)
     {
-
+        return $this->updateSettings($request);
     }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        return view('admin.settings.view');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-
-
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-
-    }
-
 }

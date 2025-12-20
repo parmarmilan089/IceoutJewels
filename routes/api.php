@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\User\ChatController;
 use App\Http\Controllers\API\ForgotPasswordController;
+use App\Http\Controllers\Api\LandingPageController;
+
+Route::get('/landing-page', [LandingPageController::class, 'index']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
